@@ -4,43 +4,22 @@ from PIL import Image
 from flask import Flask, render_template, request, jsonify
 import tensorflow as tf
 
+
 app = Flask(__name__)
 
-# --------------------------------------------------
-# MODEL
-# --------------------------------------------------
 
-MODEL_PATH = "best_skin_lesion_model.keras"
-
-model = None
-model_load_error = None
-
-try:
-    model = tf.keras.models.load_model(
-        MODEL_PATH,
-        compile=False,
-        custom_objects={
-            "Patches": Patches,
-            "PatchEncoder": PatchEncoder
-        }
-    )
-    print("MODEL LOADED SUCCESSFULLY")
-
-except Exception as e:
-    model_load_error = str(e)
-    print("MODEL LOAD ERROR:", repr(e))
-
-
-# --------------------------------------------------
-# CUSTOM LAYERS
-# --------------------------------------------------
+# ============================================================
+# 1. CUSTOM LAYERS
+# ============================================================
 
 class Patches(tf.keras.layers.Layer):
+
     def __init__(self, patch_size, **kwargs):
         super().__init__(**kwargs)
         self.patch_size = patch_size
 
     def call(self, images):
+
         batch_size = tf.shape(images)[0]
 
         patches = tf.image.extract_patches(
@@ -57,7 +36,12 @@ class Patches(tf.keras.layers.Layer):
                 self.patch_size,
                 1
             ],
-            rates=[1, 1, 1, 1],
+            rates=[
+                1,
+                1,
+                1,
+                1
+            ],
             padding="VALID"
         )
 
@@ -75,15 +59,25 @@ class Patches(tf.keras.layers.Layer):
         return patches
 
     def get_config(self):
+
         config = super().get_config()
+
         config.update({
             "patch_size": self.patch_size
         })
+
         return config
 
 
 class PatchEncoder(tf.keras.layers.Layer):
-    def __init__(self, num_patches, projection_dim, **kwargs):
+
+    def __init__(
+        self,
+        num_patches,
+        projection_dim,
+        **kwargs
+    ):
+
         super().__init__(**kwargs)
 
         self.num_patches = num_patches
@@ -99,6 +93,7 @@ class PatchEncoder(tf.keras.layers.Layer):
         )
 
     def call(self, patch):
+
         positions = tf.range(
             start=0,
             limit=self.num_patches,
@@ -107,37 +102,81 @@ class PatchEncoder(tf.keras.layers.Layer):
 
         encoded = (
             self.projection(patch)
-            + self.position_embedding(positions)
+            +
+            self.position_embedding(positions)
         )
 
         return encoded
 
     def get_config(self):
+
         config = super().get_config()
+
         config.update({
             "num_patches": self.num_patches,
             "projection_dim": self.projection_dim
         })
+
         return config
 
 
-# --------------------------------------------------
-# IMAGE PREPROCESSING
-# --------------------------------------------------
+# ============================================================
+# 2. LOAD THE TRAINED MODEL
+# ============================================================
+
+MODEL_PATH = "best_skin_lesion_model.keras"
+
+model = None
+model_load_error = None
+
+
+try:
+
+    model = tf.keras.models.load_model(
+        MODEL_PATH,
+        compile=False,
+        custom_objects={
+            "Patches": Patches,
+            "PatchEncoder": PatchEncoder
+        }
+    )
+
+    print("========================================")
+    print("MODEL LOADED SUCCESSFULLY")
+    print("========================================")
+
+
+except Exception as e:
+
+    model_load_error = str(e)
+
+    print("========================================")
+    print("MODEL LOAD ERROR")
+    print(repr(e))
+    print("========================================")
+
+
+# ============================================================
+# 3. IMAGE PREPROCESSING
+# ============================================================
 
 def preprocess_image(pil_img):
 
+    # Convert image to RGB
     img = pil_img.convert("RGB")
 
+    # Resize to the model's expected size
     img = img.resize(
         (224, 224)
     )
 
+    # Convert to NumPy array
     arr = np.array(
         img,
         dtype=np.float32
     )
 
+    # Add batch dimension
     arr = np.expand_dims(
         arr,
         axis=0
@@ -146,37 +185,64 @@ def preprocess_image(pil_img):
     return arr
 
 
-# --------------------------------------------------
-# ROUTES
-# --------------------------------------------------
+# ============================================================
+# 4. HOME PAGE
+# ============================================================
 
 @app.route("/")
 def home():
+
     return render_template(
         "index.html"
     )
 
 
-@app.route("/analyze", methods=["POST"])
+# ============================================================
+# 5. IMAGE ANALYSIS
+# ============================================================
+
+@app.route(
+    "/analyze",
+    methods=["POST"]
+)
 def analyze():
 
+    # Check that the model loaded
     if model is None:
+
         return jsonify({
-            "error": "AI model could not be loaded.",
-            "details": model_load_error
+            "error":
+                "AI model could not be loaded.",
+
+            "details":
+                model_load_error
         }), 500
 
+
+    # Check that an image was uploaded
     if "image" not in request.files:
+
         return jsonify({
-            "error": "No image was uploaded."
+            "error":
+                "No image was uploaded."
         }), 400
+
 
     file = request.files["image"]
 
+
+    # Check that a file was actually selected
     if file.filename == "":
+
         return jsonify({
-            "error": "No image was selected."
+            "error":
+                "No image was selected."
         }), 400
+
+
+    # ========================================================
+    # PROCESS IMAGE
+    # ========================================================
 
     try:
 
@@ -191,13 +257,19 @@ def analyze():
     except Exception as e:
 
         return jsonify({
-            "error": "The uploaded file could not be processed.",
-            "details": str(e)
+
+            "error":
+                "The uploaded file could not be processed.",
+
+            "details":
+                str(e)
+
         }), 400
 
-    # --------------------------------------------------
-    # MODEL PREDICTION
-    # --------------------------------------------------
+
+    # ========================================================
+    # RUN AI MODEL
+    # ========================================================
 
     try:
 
@@ -207,12 +279,15 @@ def analyze():
         )
 
         probability = float(
-            np.asarray(prediction).flatten()[0]
+            np.asarray(
+                prediction
+            ).flatten()[0]
         )
 
-        # Model output:
-        # > 0.5 = Malignant
-        # <= 0.5 = Benign
+
+        # ====================================================
+        # INTERPRET MODEL OUTPUT
+        # ====================================================
 
         if probability > 0.5:
 
@@ -226,16 +301,28 @@ def analyze():
 
             confidence = 1 - probability
 
+
+        # ====================================================
+        # RETURN RESULT TO WEBSITE
+        # ====================================================
+
         return jsonify({
 
-            "prediction": label,
+            "prediction":
+                label,
 
-            "confidence": round(
-                confidence * 100,
-                2
-            )
+            "confidence":
+                round(
+                    confidence * 100,
+                    2
+                )
 
         })
+
+
+    # ========================================================
+    # CATCH MODEL ERRORS
+    # ========================================================
 
     except Exception as e:
 
@@ -255,9 +342,9 @@ def analyze():
         }), 500
 
 
-# --------------------------------------------------
-# RUN
-# --------------------------------------------------
+# ============================================================
+# 6. START FLASK SERVER
+# ============================================================
 
 if __name__ == "__main__":
 
