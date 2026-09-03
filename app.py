@@ -1,5 +1,23 @@
+# ============================================================
+# DERMAI - FLASK APPLICATION
+# Optimized for low-memory deployment
+# ============================================================
+
 import os
+
+# ------------------------------------------------------------
+# IMPORTANT: Set TensorFlow environment variables BEFORE
+# importing TensorFlow
+# ------------------------------------------------------------
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
+
 import time
+import gc
 import traceback
 
 import numpy as np
@@ -11,17 +29,27 @@ import tensorflow as tf
 
 
 # ============================================================
+# LIMIT TENSORFLOW RESOURCE USAGE
+# ============================================================
+
+try:
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+except RuntimeError:
+    pass
+
+
+# ============================================================
 # FLASK APP
 # ============================================================
 
 app = Flask(__name__)
 
-# Allow uploads up to 10MB
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 
 # ============================================================
-# CUSTOM TRANSFORMER LAYERS
+# CUSTOM VISION TRANSFORMER LAYERS
 # ============================================================
 
 class Patches(tf.keras.layers.Layer):
@@ -30,31 +58,15 @@ class Patches(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.patch_size = patch_size
 
-
     def call(self, images):
 
         batch_size = tf.shape(images)[0]
 
         patches = tf.image.extract_patches(
             images=images,
-            sizes=[
-                1,
-                self.patch_size,
-                self.patch_size,
-                1
-            ],
-            strides=[
-                1,
-                self.patch_size,
-                self.patch_size,
-                1
-            ],
-            rates=[
-                1,
-                1,
-                1,
-                1
-            ],
+            sizes=[1, self.patch_size, self.patch_size, 1],
+            strides=[1, self.patch_size, self.patch_size, 1],
+            rates=[1, 1, 1, 1],
             padding="VALID"
         )
 
@@ -62,15 +74,10 @@ class Patches(tf.keras.layers.Layer):
 
         patches = tf.reshape(
             patches,
-            [
-                batch_size,
-                -1,
-                patch_dims
-            ]
+            [batch_size, -1, patch_dims]
         )
 
         return patches
-
 
     def get_config(self):
 
@@ -81,7 +88,6 @@ class Patches(tf.keras.layers.Layer):
         })
 
         return config
-
 
 
 class PatchEncoder(tf.keras.layers.Layer):
@@ -99,14 +105,13 @@ class PatchEncoder(tf.keras.layers.Layer):
         self.projection_dim = projection_dim
 
         self.projection = tf.keras.layers.Dense(
-            units=projection_dim
+            projection_dim
         )
 
         self.position_embedding = tf.keras.layers.Embedding(
             input_dim=num_patches,
             output_dim=projection_dim
         )
-
 
     def call(self, patch):
 
@@ -118,12 +123,10 @@ class PatchEncoder(tf.keras.layers.Layer):
 
         encoded = (
             self.projection(patch)
-            +
-            self.position_embedding(positions)
+            + self.position_embedding(positions)
         )
 
         return encoded
-
 
     def get_config(self):
 
@@ -135,7 +138,6 @@ class PatchEncoder(tf.keras.layers.Layer):
         })
 
         return config
-
 
 
 # ============================================================
@@ -151,138 +153,41 @@ MODEL_PATH = os.path.join(
     "best_skin_lesion_model.keras"
 )
 
-
 model = None
 model_load_error = None
 
 
-print("\n========================================", flush=True)
+print("=" * 60, flush=True)
 print("DERMAI STARTING", flush=True)
-print("========================================", flush=True)
+print("=" * 60, flush=True)
 
-print(
-    f"MODEL PATH: {MODEL_PATH}",
-    flush=True
-)
-
-print(
-    f"MODEL EXISTS: {os.path.exists(MODEL_PATH)}",
-    flush=True
-)
+print(f"MODEL PATH: {MODEL_PATH}", flush=True)
+print(f"MODEL EXISTS: {os.path.exists(MODEL_PATH)}", flush=True)
 
 
 try:
 
-    print(
-        "LOADING MODEL...",
-        flush=True
-    )
-
+    print("LOADING AI MODEL...", flush=True)
 
     model = tf.keras.models.load_model(
-
         MODEL_PATH,
-
         compile=False,
-
         custom_objects={
-
             "Patches": Patches,
-
             "PatchEncoder": PatchEncoder
-
         }
-
     )
 
+    print("MODEL LOADED SUCCESSFULLY!", flush=True)
+    print(f"MODEL INPUT: {model.input_shape}", flush=True)
+    print(f"MODEL OUTPUT: {model.output_shape}", flush=True)
 
-    print("\n========================================", flush=True)
-
-    print(
-        "MODEL LOADED SUCCESSFULLY",
-        flush=True
-    )
-
-    print(
-        f"MODEL INPUT: {model.input_shape}",
-        flush=True
-    )
-
-    print(
-        f"MODEL OUTPUT: {model.output_shape}",
-        flush=True
-    )
-
-    print("========================================\n", flush=True)
-
-
-except Exception as e:
+except Exception:
 
     model_load_error = traceback.format_exc()
 
-    print("\n========================================", flush=True)
-
-    print(
-        "MODEL LOAD ERROR",
-        flush=True
-    )
-
-    print(
-        model_load_error,
-        flush=True
-    )
-
-    print("========================================\n", flush=True)
-
-
-
-# ============================================================
-# WARM UP MODEL
-# ============================================================
-
-if model is not None:
-
-    try:
-
-        print(
-            "WARMING UP MODEL...",
-            flush=True
-        )
-
-
-        dummy_input = np.zeros(
-            (1, 224, 224, 3),
-            dtype=np.float32
-        )
-
-
-        # Run one prediction during startup
-        # This prevents first real request issues
-
-        _ = model(
-            dummy_input,
-            training=False
-        )
-
-
-        print(
-            "MODEL WARM-UP SUCCESSFUL",
-            flush=True
-        )
-
-
-    except Exception:
-
-        print(
-            "MODEL WARM-UP FAILED:",
-            flush=True
-        )
-
-        print(
-            traceback.format_exc(),
-            flush=True
-        )
-
+    print("MODEL LOAD ERROR:", flush=True)
+    print(model_load_error, flush=True)
 
 
 # ============================================================
@@ -291,73 +196,44 @@ if model is not None:
 
 def preprocess_image(pil_img):
 
-    print(
-        "PREPROCESSING IMAGE...",
-        flush=True
-    )
+    print("PREPROCESSING IMAGE...", flush=True)
 
-
-    # Convert image to RGB
-
+    # Convert to RGB
     image = pil_img.convert("RGB")
 
-
-    # Resize
-
+    # Resize exactly as training input expects
     image = image.resize(
-        (224, 224)
+        (224, 224),
+        Image.Resampling.LANCZOS
     )
 
-
-    # Convert to NumPy
-
-    image_array = np.array(
+    # Convert to float32
+    image_array = np.asarray(
         image,
         dtype=np.float32
     )
 
-
-    print(
-        f"RAW IMAGE SHAPE: {image_array.shape}",
-        flush=True
-    )
-
-
-    # IMPORTANT:
-    # Normalize image between 0 and 1
-    # If your training code used rescaling
-
-    image_array = image_array / 255.0
-
+    # Normalize
+    image_array /= 255.0
 
     # Add batch dimension
-
     image_array = np.expand_dims(
         image_array,
         axis=0
     )
 
+    # Make memory layout efficient
+    image_array = np.ascontiguousarray(
+        image_array,
+        dtype=np.float32
+    )
 
     print(
         f"FINAL INPUT SHAPE: {image_array.shape}",
         flush=True
     )
 
-
-    print(
-        f"INPUT MIN: {image_array.min()}",
-        flush=True
-    )
-
-
-    print(
-        f"INPUT MAX: {image_array.max()}",
-        flush=True
-    )
-
-
     return image_array
-
 
 
 # ============================================================
@@ -366,155 +242,112 @@ def preprocess_image(pil_img):
 
 @app.route("/")
 def home():
-
-    return render_template(
-        "index.html"
-    )
-
+    return render_template("index.html")
 
 
 # ============================================================
 # ANALYZE IMAGE
 # ============================================================
 
-@app.route(
-    "/analyze",
-    methods=["POST"]
-)
+@app.route("/analyze", methods=["POST"])
 def analyze():
 
-    print("\n========================================", flush=True)
+    print("\n" + "=" * 60, flush=True)
+    print("ANALYZE REQUEST RECEIVED", flush=True)
+    print("=" * 60, flush=True)
 
-    print(
-        "ANALYZE REQUEST RECEIVED",
-        flush=True
-    )
-
-    print("========================================", flush=True)
-
+    processed_image = None
+    prediction_tensor = None
 
     try:
 
-        # ====================================================
+        # ----------------------------------------------------
         # CHECK MODEL
-        # ====================================================
+        # ----------------------------------------------------
 
         if model is None:
 
-            print(
-                "ERROR: MODEL NOT LOADED",
-                flush=True
-            )
-
-
             return jsonify({
-
-                "error":
-                    "AI model is unavailable.",
-
-                "details":
-                    model_load_error
-
+                "error": "AI model failed to load."
             }), 500
 
 
-        # ====================================================
-        # CHECK IMAGE
-        # ====================================================
+        # ----------------------------------------------------
+        # CHECK FILE
+        # ----------------------------------------------------
 
         if "image" not in request.files:
 
-            print(
-                "ERROR: NO IMAGE IN REQUEST",
-                flush=True
-            )
-
-
             return jsonify({
-
-                "error":
-                    "No image was uploaded."
-
+                "error": "No image uploaded."
             }), 400
 
 
         file = request.files["image"]
 
-
-        print(
-            f"FILENAME: {file.filename}",
-            flush=True
-        )
-
-
-        if not file.filename:
+        if file.filename == "":
 
             return jsonify({
-
-                "error":
-                    "No image selected."
-
+                "error": "No image selected."
             }), 400
 
 
-        # ====================================================
+        print(
+            f"PROCESSING FILE: {file.filename}",
+            flush=True
+        )
+
+
+        # ----------------------------------------------------
         # OPEN IMAGE
-        # ====================================================
+        # ----------------------------------------------------
+
+        image = Image.open(file.stream)
 
         print(
-            "OPENING IMAGE...",
+            f"ORIGINAL SIZE: {image.size}",
             flush=True
         )
 
 
-        image = Image.open(
-            file.stream
-        )
-
-
-        print(
-            f"IMAGE SIZE: {image.size}",
-            flush=True
-        )
-
-
-        print(
-            f"IMAGE MODE: {image.mode}",
-            flush=True
-        )
-
-
-        # ====================================================
+        # ----------------------------------------------------
         # PREPROCESS
-        # ====================================================
+        # ----------------------------------------------------
 
-        processed_image = preprocess_image(
-            image
-        )
+        processed_image = preprocess_image(image)
 
 
-        # ====================================================
-        # PREDICTION
-        # ====================================================
+        # Explicitly close image
+        image.close()
+
+
+        # ----------------------------------------------------
+        # MEMORY CLEANUP BEFORE INFERENCE
+        # ----------------------------------------------------
+
+        gc.collect()
+
+
+        # ----------------------------------------------------
+        # RUN INFERENCE
+        # ----------------------------------------------------
 
         print(
             "STARTING AI PREDICTION...",
             flush=True
         )
 
-
         start_time = time.time()
 
 
-        # DO NOT USE model.predict()
-        # Direct model call is lighter and more stable on Render
-
+        # Use direct TensorFlow inference
         prediction_tensor = model(
             processed_image,
             training=False
         )
 
 
+        # Convert immediately to NumPy
         prediction = prediction_tensor.numpy()
 
 
@@ -522,66 +355,51 @@ def analyze():
 
 
         print(
-            f"PREDICTION FINISHED IN {elapsed:.2f} SECONDS",
+            f"PREDICTION FINISHED IN {elapsed:.2f}s",
             flush=True
         )
 
 
         print(
-            f"RAW PREDICTION: {prediction}",
+            f"RAW OUTPUT: {prediction}",
             flush=True
         )
 
 
-        # ====================================================
-        # GET PROBABILITY
-        # ====================================================
+        # ----------------------------------------------------
+        # EXTRACT PROBABILITY
+        # ----------------------------------------------------
 
         probability = float(
-            np.asarray(
-                prediction
-            ).flatten()[0]
+            np.asarray(prediction)
+            .flatten()[0]
         )
 
 
-        print(
-            f"PROBABILITY: {probability}",
-            flush=True
-        )
-
-
-        # ====================================================
-        # SAFETY CLAMP
-        # ====================================================
-
+        # Safety clamp
         probability = max(
             0.0,
-            min(
-                1.0,
-                probability
-            )
+            min(1.0, probability)
         )
 
 
-        # ====================================================
-        # INTERPRET RESULT
-        # ====================================================
+        # ----------------------------------------------------
+        # CLASSIFICATION
+        # ----------------------------------------------------
 
         if probability >= 0.5:
 
             label = "Malignant"
-
-            confidence_value = probability
+            confidence = probability
 
         else:
 
             label = "Benign"
-
-            confidence_value = 1 - probability
+            confidence = 1.0 - probability
 
 
         confidence_percent = round(
-            confidence_value * 100,
+            confidence * 100,
             2
         )
 
@@ -591,76 +409,63 @@ def analyze():
             flush=True
         )
 
-
         print(
             f"CONFIDENCE: {confidence_percent}%",
             flush=True
         )
 
 
-        # ====================================================
-        # RETURN JSON
-        # ====================================================
+        # ----------------------------------------------------
+        # CLEAN RESPONSE
+        # ----------------------------------------------------
 
-        response_data = {
+        return jsonify({
 
             "prediction": label,
 
             "confidence": confidence_percent,
 
-            "inference_time":
-                round(
-                    elapsed,
-                    2
-                )
+            "inference_time": round(
+                elapsed,
+                2
+            )
 
-        }
-
-
-        print(
-            f"RETURNING: {response_data}",
-            flush=True
-        )
-
-
-        print("========================================\n", flush=True)
-
-
-        return jsonify(
-            response_data
-        )
+        })
 
 
     except Exception as e:
 
         error_details = traceback.format_exc()
 
-
-        print("\n========================================", flush=True)
-
-        print(
-            "ANALYSIS ERROR",
-            flush=True
-        )
-
-        print(
-            error_details,
-            flush=True
-        )
-
-        print("========================================\n", flush=True)
-
+        print("\nANALYSIS ERROR:", flush=True)
+        print(error_details, flush=True)
 
         return jsonify({
 
-            "error":
-                "Analysis failed.",
+            "error": "Analysis failed.",
 
-            "details":
-                str(e)
+            "details": str(e)
 
         }), 500
 
+
+    finally:
+
+        # ----------------------------------------------------
+        # FREE TEMPORARY MEMORY
+        # ----------------------------------------------------
+
+        try:
+            del processed_image
+        except Exception:
+            pass
+
+        try:
+            del prediction_tensor
+        except Exception:
+            pass
+
+        gc.collect()
 
 
 # ============================================================
@@ -670,37 +475,19 @@ def analyze():
 @app.route("/health")
 def health():
 
-    if model is None:
-
-        return jsonify({
-
-            "status": "error",
-
-            "model_loaded": False,
-
-            "error": model_load_error
-
-        }), 500
-
-
     return jsonify({
 
-        "status": "ok",
+        "status":
+            "healthy" if model is not None else "error",
 
-        "model_loaded": True,
-
-        "model_input":
-            str(model.input_shape),
-
-        "model_output":
-            str(model.output_shape)
+        "model_loaded":
+            model is not None
 
     })
 
 
-
 # ============================================================
-# ERROR HANDLERS
+# FILE TOO LARGE
 # ============================================================
 
 @app.errorhandler(413)
@@ -709,14 +496,13 @@ def file_too_large(error):
     return jsonify({
 
         "error":
-            "Image file is too large. Maximum size is 10MB."
+            "Image too large. Maximum file size is 10MB."
 
     }), 413
 
 
-
 # ============================================================
-# START SERVER
+# START LOCAL SERVER
 # ============================================================
 
 if __name__ == "__main__":
@@ -728,17 +514,8 @@ if __name__ == "__main__":
         )
     )
 
-
-    print(
-        f"STARTING SERVER ON PORT {port}",
-        flush=True
-    )
-
-
     app.run(
-
         host="0.0.0.0",
-
-        port=port
-
+        port=port,
+        debug=False
     )
