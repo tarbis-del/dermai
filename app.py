@@ -1,28 +1,46 @@
 import os
-import io
-import base64
 import numpy as np
-
-from PIL import Image, UnidentifiedImageError
-from flask import Flask, request, render_template, jsonify
-
+from PIL import Image
+from flask import Flask, render_template, request, jsonify
 import tensorflow as tf
-from tensorflow.keras import layers
+
+app = Flask(__name__)
+
+# --------------------------------------------------
+# MODEL
+# --------------------------------------------------
+
+MODEL_PATH = "best_skin_lesion_model.keras"
+
+model = None
+model_load_error = None
+
+try:
+    model = tf.keras.models.load_model(
+        MODEL_PATH,
+        compile=False,
+        custom_objects={
+            "Patches": Patches,
+            "PatchEncoder": PatchEncoder
+        }
+    )
+    print("MODEL LOADED SUCCESSFULLY")
+
+except Exception as e:
+    model_load_error = str(e)
+    print("MODEL LOAD ERROR:", repr(e))
 
 
-# =========================================================
-# CUSTOM LAYER 1: PATCHES
-# Required by your Transformer model
-# =========================================================
+# --------------------------------------------------
+# CUSTOM LAYERS
+# --------------------------------------------------
 
-class Patches(layers.Layer):
-
+class Patches(tf.keras.layers.Layer):
     def __init__(self, patch_size, **kwargs):
         super().__init__(**kwargs)
         self.patch_size = patch_size
 
     def call(self, images):
-
         batch_size = tf.shape(images)[0]
 
         patches = tf.image.extract_patches(
@@ -57,47 +75,30 @@ class Patches(layers.Layer):
         return patches
 
     def get_config(self):
-
         config = super().get_config()
-
         config.update({
             "patch_size": self.patch_size
         })
-
         return config
 
 
-# =========================================================
-# CUSTOM LAYER 2: PATCH ENCODER
-# Required by your Transformer model
-# =========================================================
-
-class PatchEncoder(layers.Layer):
-
-    def __init__(
-        self,
-        num_patches,
-        projection_dim,
-        **kwargs
-    ):
-
+class PatchEncoder(tf.keras.layers.Layer):
+    def __init__(self, num_patches, projection_dim, **kwargs):
         super().__init__(**kwargs)
 
         self.num_patches = num_patches
         self.projection_dim = projection_dim
 
-        self.projection = layers.Dense(
-            projection_dim
+        self.projection = tf.keras.layers.Dense(
+            units=projection_dim
         )
 
-        self.position_embedding = layers.Embedding(
+        self.position_embedding = tf.keras.layers.Embedding(
             input_dim=num_patches,
             output_dim=projection_dim
         )
 
-
     def call(self, patch):
-
         positions = tf.range(
             start=0,
             limit=self.num_patches,
@@ -106,293 +107,168 @@ class PatchEncoder(layers.Layer):
 
         encoded = (
             self.projection(patch)
-            +
-            self.position_embedding(positions)
+            + self.position_embedding(positions)
         )
 
         return encoded
 
-
     def get_config(self):
-
         config = super().get_config()
-
         config.update({
             "num_patches": self.num_patches,
             "projection_dim": self.projection_dim
         })
-
         return config
 
 
-# =========================================================
-# FLASK APP
-# =========================================================
-
-app = Flask(__name__)
-
-
-# =========================================================
-# MODEL PATH
-# =========================================================
-
-MODEL_PATH = os.path.join(
-    os.path.dirname(__file__),
-    "best_skin_lesion_model.keras"
-)
-
-
-# =========================================================
-# IMAGE SIZE
-# =========================================================
-
-IMG_SIZE = (
-    224,
-    224
-)
-
-
-# =========================================================
-# LOAD YOUR TRAINED AI MODEL
-# =========================================================
-
-print("Loading AI model...")
-
-
-model = tf.keras.models.load_model(
-
-    MODEL_PATH,
-
-    custom_objects={
-
-        "Patches": Patches,
-
-        "PatchEncoder": PatchEncoder
-
-    },
-
-    compile=False
-
-)
-
-
-print("AI model loaded successfully!")
-
-
-# =========================================================
+# --------------------------------------------------
 # IMAGE PREPROCESSING
-# =========================================================
+# --------------------------------------------------
 
-def preprocess_image(file_stream):
+def preprocess_image(pil_img):
 
-    # Open uploaded image
-    image = Image.open(
-        file_stream
-    ).convert("RGB")
+    img = pil_img.convert("RGB")
 
-
-    # Keep original for website display
-    original = image.copy()
-
-
-    # Resize for AI model
-    image = image.resize(
-        IMG_SIZE
+    img = img.resize(
+        (224, 224)
     )
 
-
-    # Convert to NumPy array
-    image_array = np.array(
-        image,
+    arr = np.array(
+        img,
         dtype=np.float32
     )
 
-
-    # Add batch dimension
-    image_array = np.expand_dims(
-        image_array,
+    arr = np.expand_dims(
+        arr,
         axis=0
     )
 
+    return arr
 
-    return image_array, original
 
-
-# =========================================================
-# HOME PAGE
-# =========================================================
+# --------------------------------------------------
+# ROUTES
+# --------------------------------------------------
 
 @app.route("/")
 def home():
-
     return render_template(
         "index.html"
     )
 
 
-# =========================================================
-# IMAGE ANALYSIS
-# =========================================================
-
-@app.route(
-    "/analyze",
-    methods=["POST"]
-)
-
+@app.route("/analyze", methods=["POST"])
 def analyze():
 
-
-    # Check image exists
-    if "image" not in request.files:
-
+    if model is None:
         return jsonify({
+            "error": "AI model could not be loaded.",
+            "details": model_load_error
+        }), 500
 
-            "error":
-            "No image was uploaded."
-
+    if "image" not in request.files:
+        return jsonify({
+            "error": "No image was uploaded."
         }), 400
-
 
     file = request.files["image"]
 
-
-    # Check filename
     if file.filename == "":
-
         return jsonify({
-
-            "error":
-            "Please select an image."
-
+            "error": "No image was selected."
         }), 400
-
 
     try:
 
-        processed_image, original_image = preprocess_image(
+        image = Image.open(
             file.stream
         )
 
+        processed_image = preprocess_image(
+            image
+        )
 
-    except (
-        UnidentifiedImageError,
-        OSError
-    ):
+    except Exception as e:
+
+        return jsonify({
+            "error": "The uploaded file could not be processed.",
+            "details": str(e)
+        }), 400
+
+    # --------------------------------------------------
+    # MODEL PREDICTION
+    # --------------------------------------------------
+
+    try:
+
+        prediction = model.predict(
+            processed_image,
+            verbose=0
+        )
+
+        probability = float(
+            np.asarray(prediction).flatten()[0]
+        )
+
+        # Model output:
+        # > 0.5 = Malignant
+        # <= 0.5 = Benign
+
+        if probability > 0.5:
+
+            label = "Malignant"
+
+            confidence = probability
+
+        else:
+
+            label = "Benign"
+
+            confidence = 1 - probability
+
+        return jsonify({
+
+            "prediction": label,
+
+            "confidence": round(
+                confidence * 100,
+                2
+            )
+
+        })
+
+    except Exception as e:
+
+        print(
+            "MODEL PREDICTION ERROR:",
+            repr(e)
+        )
 
         return jsonify({
 
             "error":
-            "Invalid image file."
+                "The AI model could not analyze this image.",
 
-        }), 400
+            "details":
+                str(e)
 
-
-    # =====================================================
-    # AI PREDICTION
-    # =====================================================
-
-    prediction = model.predict(
-
-        processed_image,
-
-        verbose=0
-
-    )
+        }), 500
 
 
-    # Convert prediction to single number
-    prediction = float(
-
-        prediction.flatten()[0]
-
-    )
-
-
-    # =====================================================
-    # CLASSIFICATION
-    # =====================================================
-
-    if prediction >= 0.5:
-
-        label = "Malignant"
-
-        confidence = prediction
-
-        risk = "high"
-
-
-    else:
-
-        label = "Benign"
-
-        confidence = 1 - prediction
-
-        risk = "low"
-
-
-    # =====================================================
-    # CONVERT IMAGE TO BASE64
-    # So website can display it
-    # =====================================================
-
-    buffer = io.BytesIO()
-
-
-    original_image.save(
-
-        buffer,
-
-        format="JPEG",
-
-        quality=90
-
-    )
-
-
-    image_base64 = base64.b64encode(
-
-        buffer.getvalue()
-
-    ).decode("utf-8")
-
-
-    # =====================================================
-    # SEND RESULTS TO WEBSITE
-    # =====================================================
-
-    return jsonify({
-
-        "label": label,
-
-        "confidence": round(
-            confidence * 100,
-            2
-        ),
-
-        "raw_prediction": round(
-            prediction,
-            5
-        ),
-
-        "risk": risk,
-
-        "image": image_base64
-
-    })
-
-
-# =========================================================
-# RUN WEBSITE
-# =========================================================
+# --------------------------------------------------
+# RUN
+# --------------------------------------------------
 
 if __name__ == "__main__":
 
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
+
     app.run(
-
-        debug=True,
-
-        host="127.0.0.1",
-
-        port=5000
-
+        host="0.0.0.0",
+        port=port
     )
