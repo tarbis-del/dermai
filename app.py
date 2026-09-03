@@ -1,15 +1,21 @@
+
 import os
+import time
 import numpy as np
 from PIL import Image
 from flask import Flask, render_template, request, jsonify
 import tensorflow as tf
 
 
+# ============================================================
+# FLASK APP
+# ============================================================
+
 app = Flask(__name__)
 
 
 # ============================================================
-# 1. CUSTOM LAYERS
+# CUSTOM TRANSFORMER LAYERS
 # ============================================================
 
 class Patches(tf.keras.layers.Layer):
@@ -121,76 +127,193 @@ class PatchEncoder(tf.keras.layers.Layer):
 
 
 # ============================================================
-# 2. LOAD THE TRAINED MODEL
+# LOAD MODEL
 # ============================================================
 
-MODEL_PATH = "best_skin_lesion_model.keras"
+MODEL_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "best_skin_lesion_model.keras"
+)
+
 
 model = None
 model_load_error = None
 
 
+print("========================================", flush=True)
+print("DERMAI STARTING", flush=True)
+print("========================================", flush=True)
+
+print(
+    "MODEL PATH:",
+    MODEL_PATH,
+    flush=True
+)
+
+print(
+    "MODEL EXISTS:",
+    os.path.exists(MODEL_PATH),
+    flush=True
+)
+
+
 try:
 
-    model = tf.keras.models.load_model(
-        MODEL_PATH,
-        compile=False,
-        custom_objects={
-            "Patches": Patches,
-            "PatchEncoder": PatchEncoder
-        }
+    print(
+        "LOADING MODEL...",
+        flush=True
     )
 
-    print("========================================")
-    print("MODEL LOADED SUCCESSFULLY")
-    print("========================================")
+
+    model = tf.keras.models.load_model(
+
+        MODEL_PATH,
+
+        compile=False,
+
+        custom_objects={
+
+            "Patches":
+                Patches,
+
+            "PatchEncoder":
+                PatchEncoder
+
+        }
+
+    )
+
+
+    print(
+        "========================================",
+        flush=True
+    )
+
+    print(
+        "MODEL LOADED SUCCESSFULLY",
+        flush=True
+    )
+
+    print(
+        "MODEL INPUT:",
+        model.input_shape,
+        flush=True
+    )
+
+    print(
+        "MODEL OUTPUT:",
+        model.output_shape,
+        flush=True
+    )
+
+    print(
+        "========================================",
+        flush=True
+    )
 
 
 except Exception as e:
 
-    model_load_error = str(e)
+    model_load_error = repr(e)
 
-    print("========================================")
-    print("MODEL LOAD ERROR")
-    print(repr(e))
-    print("========================================")
+    print(
+        "========================================",
+        flush=True
+    )
+
+    print(
+        "MODEL LOAD ERROR:",
+        repr(e),
+        flush=True
+    )
+
+    print(
+        "========================================",
+        flush=True
+    )
 
 
 # ============================================================
-# 3. IMAGE PREPROCESSING
+# IMAGE PREPROCESSING
 # ============================================================
 
 def preprocess_image(pil_img):
 
-    # Convert image to RGB
+    print(
+        "PREPROCESSING IMAGE...",
+        flush=True
+    )
+
+
+    # Convert to RGB
+
     img = pil_img.convert("RGB")
 
-    # Resize to the model's expected size
+
+    print(
+        "IMAGE CONVERTED TO RGB",
+        flush=True
+    )
+
+
+    # Resize
+
     img = img.resize(
         (224, 224)
     )
 
-    # Convert to NumPy array
+
+    print(
+        "IMAGE RESIZED TO 224x224",
+        flush=True
+    )
+
+
+    # NumPy
+
     arr = np.array(
         img,
         dtype=np.float32
     )
 
-    # Add batch dimension
+
+    print(
+        "NUMPY ARRAY CREATED:",
+        arr.shape,
+        arr.dtype,
+        flush=True
+    )
+
+
+    # Batch dimension
+
     arr = np.expand_dims(
         arr,
         axis=0
     )
 
+
+    print(
+        "BATCH CREATED:",
+        arr.shape,
+        flush=True
+    )
+
+
     return arr
 
 
 # ============================================================
-# 4. HOME PAGE
+# HOME PAGE
 # ============================================================
 
 @app.route("/")
 def home():
+
+    print(
+        "HOME PAGE REQUEST",
+        flush=True
+    )
 
     return render_template(
         "index.html"
@@ -198,7 +321,7 @@ def home():
 
 
 # ============================================================
-# 5. IMAGE ANALYSIS
+# ANALYZE IMAGE
 # ============================================================
 
 @app.route(
@@ -207,54 +330,161 @@ def home():
 )
 def analyze():
 
-    # Check that the model loaded
+    print(
+        "========================================",
+        flush=True
+    )
+
+    print(
+        "ANALYZE REQUEST RECEIVED",
+        flush=True
+    )
+
+    print(
+        "========================================",
+        flush=True
+    )
+
+
+    # ========================================================
+    # CHECK MODEL
+    # ========================================================
+
+    print(
+        "CHECKING MODEL...",
+        flush=True
+    )
+
+
     if model is None:
 
+        print(
+            "MODEL IS NONE",
+            flush=True
+        )
+
+
         return jsonify({
+
             "error":
                 "AI model could not be loaded.",
 
             "details":
                 model_load_error
+
         }), 500
 
 
-    # Check that an image was uploaded
+    print(
+        "MODEL IS READY",
+        flush=True
+    )
+
+
+    # ========================================================
+    # CHECK FILE
+    # ========================================================
+
+    print(
+        "CHECKING UPLOADED FILE...",
+        flush=True
+    )
+
+
+    print(
+        "FILES RECEIVED:",
+        list(request.files.keys()),
+        flush=True
+    )
+
+
     if "image" not in request.files:
 
+        print(
+            "NO IMAGE FIELD FOUND",
+            flush=True
+        )
+
+
         return jsonify({
+
             "error":
                 "No image was uploaded."
+
         }), 400
 
 
     file = request.files["image"]
 
 
-    # Check that a file was actually selected
+    print(
+        "FILE RECEIVED:",
+        file.filename,
+        flush=True
+    )
+
+
     if file.filename == "":
 
+        print(
+            "EMPTY FILENAME",
+            flush=True
+        )
+
+
         return jsonify({
+
             "error":
                 "No image was selected."
+
         }), 400
 
 
     # ========================================================
-    # PROCESS IMAGE
+    # OPEN IMAGE
     # ========================================================
 
     try:
+
+        print(
+            "OPENING IMAGE...",
+            flush=True
+        )
+
 
         image = Image.open(
             file.stream
         )
 
-        processed_image = preprocess_image(
-            image
+
+        print(
+            "IMAGE OPENED SUCCESSFULLY",
+            flush=True
         )
 
+
+        print(
+            "IMAGE SIZE:",
+            image.size,
+            flush=True
+        )
+
+
+        print(
+            "IMAGE MODE:",
+            image.mode,
+            flush=True
+        )
+
+
     except Exception as e:
+
+        print(
+            "IMAGE OPEN ERROR:",
+            repr(e),
+            flush=True
+        )
+
 
         return jsonify({
 
@@ -268,25 +498,135 @@ def analyze():
 
 
     # ========================================================
-    # RUN AI MODEL
+    # PREPROCESS
     # ========================================================
 
     try:
 
-        prediction = model.predict(
-            processed_image,
-            verbose=0
+        processed_image = preprocess_image(
+            image
         )
 
+
+        print(
+            "PREPROCESSING SUCCESSFUL",
+            flush=True
+        )
+
+
+    except Exception as e:
+
+        print(
+            "PREPROCESSING ERROR:",
+            repr(e),
+            flush=True
+        )
+
+
+        return jsonify({
+
+            "error":
+                "Image preprocessing failed.",
+
+            "details":
+                str(e)
+
+        }), 400
+
+
+    # ========================================================
+    # MODEL PREDICTION
+    # ========================================================
+
+    try:
+
+        print(
+            "========================================",
+            flush=True
+        )
+
+        print(
+            "STARTING MODEL PREDICTION",
+            flush=True
+        )
+
+        print(
+            "THIS IS WHERE TENSORFLOW RUNS",
+            flush=True
+        )
+
+        print(
+            "========================================",
+            flush=True
+        )
+
+
+        start_time = time.time()
+
+
+        prediction = model.predict(
+
+            processed_image,
+
+            verbose=0
+
+        )
+
+
+        elapsed_time = (
+            time.time()
+            -
+            start_time
+        )
+
+
+        print(
+            "========================================",
+            flush=True
+        )
+
+        print(
+            "MODEL PREDICTION FINISHED",
+            flush=True
+        )
+
+        print(
+            "INFERENCE TIME:",
+            round(elapsed_time, 2),
+            "seconds",
+            flush=True
+        )
+
+        print(
+            "RAW PREDICTION:",
+            prediction,
+            flush=True
+        )
+
+        print(
+            "========================================",
+            flush=True
+        )
+
+
         probability = float(
+
             np.asarray(
                 prediction
             ).flatten()[0]
+
+        )
+
+
+        print(
+            "PROBABILITY:",
+            probability,
+            flush=True
         )
 
 
         # ====================================================
-        # INTERPRET MODEL OUTPUT
+        # INTERPRET OUTPUT
         # ====================================================
 
         if probability > 0.5:
@@ -299,14 +639,35 @@ def analyze():
 
             label = "Benign"
 
-            confidence = 1 - probability
+            confidence = (
+                1 -
+                probability
+            )
+
+
+        print(
+            "PREDICTION:",
+            label,
+            flush=True
+        )
+
+
+        print(
+            "CONFIDENCE:",
+            round(
+                confidence * 100,
+                2
+            ),
+            "%",
+            flush=True
+        )
 
 
         # ====================================================
-        # RETURN RESULT TO WEBSITE
+        # RETURN RESULT
         # ====================================================
 
-        return jsonify({
+        response = {
 
             "prediction":
                 label,
@@ -317,19 +678,43 @@ def analyze():
                     2
                 )
 
-        })
+        }
 
 
-    # ========================================================
-    # CATCH MODEL ERRORS
-    # ========================================================
+        print(
+            "RETURNING JSON:",
+            response,
+            flush=True
+        )
+
+
+        return jsonify(
+            response
+        )
+
 
     except Exception as e:
 
         print(
-            "MODEL PREDICTION ERROR:",
-            repr(e)
+            "========================================",
+            flush=True
         )
+
+        print(
+            "MODEL PREDICTION ERROR",
+            flush=True
+        )
+
+        print(
+            repr(e),
+            flush=True
+        )
+
+        print(
+            "========================================",
+            flush=True
+        )
+
 
         return jsonify({
 
@@ -337,13 +722,53 @@ def analyze():
                 "The AI model could not analyze this image.",
 
             "details":
-                str(e)
+                repr(e)
 
         }), 500
 
 
 # ============================================================
-# 6. START FLASK SERVER
+# HEALTH CHECK
+# ============================================================
+
+@app.route("/health")
+def health():
+
+    if model is None:
+
+        return jsonify({
+
+            "status":
+                "error",
+
+            "model_loaded":
+                False,
+
+            "error":
+                model_load_error
+
+        }), 500
+
+
+    return jsonify({
+
+        "status":
+            "ok",
+
+        "model_loaded":
+            True,
+
+        "model_input":
+            str(model.input_shape),
+
+        "model_output":
+            str(model.output_shape)
+
+    })
+
+
+# ============================================================
+# START SERVER
 # ============================================================
 
 if __name__ == "__main__":
@@ -355,7 +780,19 @@ if __name__ == "__main__":
         )
     )
 
-    app.run(
-        host="0.0.0.0",
-        port=port
+
+    print(
+        "STARTING FLASK ON PORT:",
+        port,
+        flush=True
     )
+
+
+    app.run(
+
+        host="0.0.0.0",
+
+        port=port
+
+    )
+
