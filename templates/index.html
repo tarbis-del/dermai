@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DermAI | Skin Lesion Analysis</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="glow glow-one"></div>
+    <div class="glow glow-two"></div>
+
+    <nav>
+        <div class="brand"><span>DERM</span>AI</div>
+        <div class="nav-tag">AI-POWERED ANALYSIS</div>
+    </nav>
+
+    <main>
+        <section class="hero">
+            <div class="eyebrow">ADVANCED IMAGE INTELLIGENCE</div>
+            <h1>Understand what<br><em>your image reveals.</em></h1>
+            <p class="subtitle">
+                Upload a skin lesion image and let our trained deep-learning model
+                analyze visual patterns in seconds.
+            </p>
+        </section>
+
+        <section class="analyzer-card">
+            <div id="uploadSection">
+                <div id="dropZone" class="drop-zone">
+                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/jpg,image/webp" hidden>
+                    <div class="upload-icon">⌁</div>
+                    <h2>Drop your image here</h2>
+                    <p>PNG, JPG, JPEG or WEBP</p>
+                    <button id="browseBtn" class="gold-btn">Choose Image</button>
+                </div>
+
+                <div class="disclaimer">
+                    <span>✦</span>
+                    This is an educational AI demonstration and is not a medical diagnosis.
+                </div>
+            </div>
+
+            <div id="previewSection" class="hidden">
+                <div class="preview-grid">
+                    <div class="image-panel">
+                        <img id="previewImage" alt="Selected skin lesion">
+                    </div>
+                    <div class="action-panel">
+                        <span class="small-label">IMAGE READY</span>
+                        <h2>Ready for analysis.</h2>
+                        <p>Your image will be processed by the trained neural network.</p>
+                        <button id="analyzeBtn" class="gold-btn large">Analyze Image <span>→</span></button>
+                        <button id="changeBtn" class="text-btn">Choose another image</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loadingSection" class="hidden loading">
+                <div class="scanner">
+                    <div class="scan-line"></div>
+                    <div class="loader-circle"></div>
+                </div>
+                <h2>Analyzing visual patterns...</h2>
+                <p>Our neural network is processing your image.</p>
+            </div>
+
+            <div id="resultSection" class="hidden">
+                <div class="result-layout">
+                    <div class="result-image-wrap">
+                        <img id="resultImage" alt="Analyzed image">
+                    </div>
+                    <div class="result-content">
+                        <span class="small-label">ANALYSIS COMPLETE</span>
+                        <h2 id="resultLabel">Result</h2>
+
+                        <div class="confidence-box">
+                            <div class="confidence-header">
+                                <span>MODEL CONFIDENCE</span>
+                                <strong id="confidenceValue">0%</strong>
+                            </div>
+                            <div class="bar"><div id="confidenceBar" class="bar-fill"></div></div>
+                        </div>
+
+                        <p id="resultText" class="result-text"></p>
+                        <button id="restartBtn" class="gold-btn">Analyze Another Image</button>
+                    </div>
+                </div>
+
+                <div class="medical-note">
+                    <strong>Important:</strong> AI predictions can be wrong. Do not use this result to diagnose,
+                    treat, or rule out skin cancer. Consult a qualified dermatologist for medical concerns.
+                </div>
+            </div>
+        </section>
+
+        <section class="how-it-works">
+            <div>
+                <span>01</span>
+                <h3>Upload</h3>
+                <p>Select a clear image for analysis.</p>
+            </div>
+            <div>
+                <span>02</span>
+                <h3>Analyze</h3>
+                <p>The neural network processes visual features.</p>
+            </div>
+            <div>
+                <span>03</span>
+                <h3>Review</h3>
+                <p>Receive the model's prediction and confidence.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>DERMAI · DEEP LEARNING RESEARCH DEMONSTRATION</footer>
+
+<script>
+const input = document.getElementById("imageInput");
+const dropZone = document.getElementById("dropZone");
+const browseBtn = document.getElementById("browseBtn");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const changeBtn = document.getElementById("changeBtn");
+const restartBtn = document.getElementById("restartBtn");
+
+const uploadSection = document.getElementById("uploadSection");
+const previewSection = document.getElementById("previewSection");
+const loadingSection = document.getElementById("loadingSection");
+const resultSection = document.getElementById("resultSection");
+
+let selectedFile = null;
+
+browseBtn.addEventListener("click", () => input.click());
+changeBtn.addEventListener("click", () => input.click());
+
+input.addEventListener("change", () => {
+    if (input.files && input.files[0]) handleFile(input.files[0]);
+});
+
+["dragenter", "dragover"].forEach(event => {
+    dropZone.addEventListener(event, e => {
+        e.preventDefault();
+        dropZone.classList.add("dragging");
+    });
+});
+
+["dragleave", "drop"].forEach(event => {
+    dropZone.addEventListener(event, e => {
+        e.preventDefault();
+        dropZone.classList.remove("dragging");
+    });
+});
+
+dropZone.addEventListener("drop", e => {
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleFile(e.dataTransfer.files[0]);
+    }
+});
+
+function handleFile(file) {
+    if (!file.type.startsWith("image/")) {
+        alert("Please upload an image file.");
+        return;
+    }
+
+    selectedFile = file;
+    const reader = new FileReader();
+
+    reader.onload = e => {
+        document.getElementById("previewImage").src = e.target.result;
+        uploadSection.classList.add("hidden");
+        previewSection.classList.remove("hidden");
+    };
+
+    reader.readAsDataURL(file);
+}
+
+analyzeBtn.addEventListener("click", async () => {
+    if (!selectedFile) return;
+
+    previewSection.classList.add("hidden");
+    loadingSection.classList.remove("hidden");
+
+    const formData = new FormData();
+    formData.append("image", selectedFile);
+
+    try {
+        const response = await fetch("/analyze", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) throw new Error(data.error || "Analysis failed.");
+
+        loadingSection.classList.add("hidden");
+        resultSection.classList.remove("hidden");
+
+        document.getElementById("resultImage").src =
+            "data:image/jpeg;base64," + data.image;
+
+        const label = document.getElementById("resultLabel");
+        label.textContent = data.label;
+        label.className = data.risk === "high" ? "result-high" : "result-low";
+
+        document.getElementById("confidenceValue").textContent =
+            data.confidence + "%";
+
+        setTimeout(() => {
+            document.getElementById("confidenceBar").style.width =
+                data.confidence + "%";
+        }, 100);
+
+        document.getElementById("resultText").textContent =
+            data.label === "Malignant"
+                ? "The model detected patterns associated with the positive class. This is not a clinical diagnosis and should be reviewed by a medical professional."
+                : "The model detected patterns associated with the negative class. This result is not a clinical diagnosis.";
+
+    } catch (error) {
+        loadingSection.classList.add("hidden");
+        previewSection.classList.remove("hidden");
+        alert(error.message);
+    }
+});
+
+restartBtn.addEventListener("click", () => {
+    selectedFile = null;
+    input.value = "";
+    resultSection.classList.add("hidden");
+    uploadSection.classList.remove("hidden");
+    document.getElementById("confidenceBar").style.width = "0%";
+});
+</script>
+</body>
+</html>
