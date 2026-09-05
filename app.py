@@ -1,21 +1,21 @@
+```python
 # ============================================================
 # DERMAI - FLASK APPLICATION
 # Optimized for low-memory deployment
 # ============================================================
 
+# IMPORTANT: Set these BEFORE importing TensorFlow
 import os
 
-# ------------------------------------------------------------
-# MEMORY OPTIMIZATION
-# These MUST be set before importing TensorFlow
-# ------------------------------------------------------------
-
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["TF_NUM_INTRAOP_THREADS"] = "1"
+os.environ["TF_NUM_INTEROP_THREADS"] = "1"
 
+import gc
 import time
 import traceback
-import gc
 
 import numpy as np
 from PIL import Image
@@ -25,18 +25,23 @@ import tensorflow as tf
 
 
 # ============================================================
+# LIMIT TENSORFLOW MEMORY / THREAD USAGE
+# ============================================================
+
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
+
+
+# ============================================================
 # FLASK APP
 # ============================================================
 
 app = Flask(__name__)
-
-# Maximum upload size: 10MB
 app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024
 
 
 # ============================================================
 # CUSTOM TRANSFORMER LAYERS
-# Required to load the Vision Transformer model
 # ============================================================
 
 class Patches(tf.keras.layers.Layer):
@@ -57,7 +62,7 @@ class Patches(tf.keras.layers.Layer):
             padding="VALID"
         )
 
-        patch_dims = patches.shape[-1]
+        patch_dims = tf.shape(patches)[-1]
 
         patches = tf.reshape(
             patches,
@@ -85,14 +90,13 @@ class PatchEncoder(tf.keras.layers.Layer):
         projection_dim,
         **kwargs
     ):
-
         super().__init__(**kwargs)
 
         self.num_patches = num_patches
         self.projection_dim = projection_dim
 
         self.projection = tf.keras.layers.Dense(
-            units=projection_dim
+            projection_dim
         )
 
         self.position_embedding = tf.keras.layers.Embedding(
@@ -126,14 +130,11 @@ class PatchEncoder(tf.keras.layers.Layer):
 
 
 # ============================================================
-# MODEL CONFIGURATION
+# LOAD MODEL
 # ============================================================
 
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# NEW MODEL
 MODEL_PATH = os.path.join(
     BASE_DIR,
     "best_transformer_model.keras"
@@ -142,14 +143,9 @@ MODEL_PATH = os.path.join(
 model = None
 model_load_error = None
 
-
-# ============================================================
-# LOAD MODEL
-# ============================================================
-
-print("\n========================================", flush=True)
+print("=" * 60, flush=True)
 print("DERMAI STARTING - LOW MEMORY MODE", flush=True)
-print("========================================", flush=True)
+print("=" * 60, flush=True)
 
 print(f"MODEL PATH: {MODEL_PATH}", flush=True)
 print(f"MODEL EXISTS: {os.path.exists(MODEL_PATH)}", flush=True)
@@ -177,52 +173,8 @@ except Exception:
 
     model_load_error = traceback.format_exc()
 
-    print("\n========================================", flush=True)
-    print("MODEL LOAD ERROR", flush=True)
+    print("MODEL LOAD ERROR:", flush=True)
     print(model_load_error, flush=True)
-    print("========================================\n", flush=True)
-
-
-# ============================================================
-# WARM UP MODEL
-# ============================================================
-
-if model is not None:
-
-    try:
-
-        print("WARMING UP MODEL...", flush=True)
-
-        dummy_input = np.zeros(
-            (1, 224, 224, 3),
-            dtype=np.float32
-        )
-
-        # Direct call uses less overhead than model.predict()
-        _ = model(
-            dummy_input,
-            training=False
-        )
-
-        del dummy_input
-        gc.collect()
-
-        print(
-            "MODEL WARM-UP SUCCESSFUL",
-            flush=True
-        )
-
-    except Exception:
-
-        print(
-            "MODEL WARM-UP FAILED:",
-            flush=True
-        )
-
-        print(
-            traceback.format_exc(),
-            flush=True
-        )
 
 
 # ============================================================
@@ -231,22 +183,19 @@ if model is not None:
 
 def preprocess_image(pil_img):
 
-    # Convert image to RGB
     image = pil_img.convert("RGB")
 
-    # Resize to model input dimensions
-    image = image.resize((224, 224))
+    image = image.resize(
+        (224, 224)
+    )
 
-    # Convert to NumPy float32
     image_array = np.asarray(
         image,
         dtype=np.float32
     )
 
-    # Normalize to 0-1
     image_array /= 255.0
 
-    # Add batch dimension
     image_array = np.expand_dims(
         image_array,
         axis=0
@@ -256,7 +205,7 @@ def preprocess_image(pil_img):
 
 
 # ============================================================
-# HOME PAGE
+# HOME
 # ============================================================
 
 @app.route("/")
@@ -266,47 +215,49 @@ def home():
 
 
 # ============================================================
+# DIAGNOSTIC ROUTE
+# ============================================================
+
+@app.route("/health")
+def health():
+
+    return jsonify({
+        "status": "ok",
+        "model_loaded": model is not None,
+        "model_error": model_load_error
+    })
+
+
+# ============================================================
 # ANALYZE IMAGE
 # ============================================================
 
 @app.route("/analyze", methods=["POST"])
 def analyze():
 
-    print("\n========================================", flush=True)
     print("ANALYZE REQUEST RECEIVED", flush=True)
-    print("========================================", flush=True)
 
     processed_image = None
-    prediction_tensor = None
 
     try:
-
-        # ----------------------------------------------------
-        # CHECK MODEL
-        # ----------------------------------------------------
 
         if model is None:
 
             return jsonify({
-                "error": "AI model failed to load.",
-                "details": model_load_error
+                "error": "AI model failed to load."
             }), 500
 
-
-        # ----------------------------------------------------
-        # CHECK IMAGE
-        # ----------------------------------------------------
 
         if "image" not in request.files:
 
             return jsonify({
-                "error": "No image was uploaded."
+                "error": "No image uploaded."
             }), 400
 
 
         file = request.files["image"]
 
-        if not file.filename:
+        if file.filename == "":
 
             return jsonify({
                 "error": "No image selected."
@@ -319,205 +270,144 @@ def analyze():
         )
 
 
-        # ----------------------------------------------------
-        # OPEN IMAGE
-        # ----------------------------------------------------
-
+        # Open image
         image = Image.open(file.stream)
 
-
-        # ----------------------------------------------------
-        # PREPROCESS
-        # ----------------------------------------------------
-
-        processed_image = preprocess_image(image)
-
-        # Close PIL image ASAP to save memory
-        image.close()
-
-
-        # ----------------------------------------------------
-        # PREDICTION
-        # ----------------------------------------------------
-
         print(
-            "STARTING AI PREDICTION...",
+            f"IMAGE SIZE: {image.size}",
             flush=True
         )
 
+
+        # Preprocess
+        processed_image = preprocess_image(image)
+
+        print(
+            f"INPUT SHAPE: {processed_image.shape}",
+            flush=True
+        )
+
+
+        # Force garbage collection BEFORE prediction
+        gc.collect()
+
+
+        print(
+            "STARTING PREDICTION...",
+            flush=True
+        )
+
+
         start_time = time.time()
 
-        # Direct model call - lighter than model.predict()
+
+        # Direct inference
         prediction_tensor = model(
             processed_image,
             training=False
         )
 
+
         prediction = prediction_tensor.numpy()
+
 
         elapsed = time.time() - start_time
 
 
-        # ----------------------------------------------------
-        # EXTRACT PROBABILITY
-        # ----------------------------------------------------
-
-        probability = float(
-            np.asarray(prediction).flatten()[0]
+        print(
+            f"PREDICTION COMPLETE: {elapsed:.2f}s",
+            flush=True
         )
 
-        # Safety clamp
+
+        print(
+            f"RAW OUTPUT: {prediction}",
+            flush=True
+        )
+
+
+        probability = float(
+            prediction.flatten()[0]
+        )
+
+
+        # Clamp probability
         probability = max(
             0.0,
             min(1.0, probability)
         )
 
 
-        # ====================================================
-        # CLASSIFICATION
-        # ====================================================
-        #
-        # IMPORTANT:
-        # This assumes:
-        # 0 = Benign
-        # 1 = Malignant
-        #
-        # ====================================================
-
         if probability >= 0.5:
 
             label = "Malignant"
-            confidence_value = probability
+            confidence = probability
 
         else:
 
             label = "Benign"
-            confidence_value = 1.0 - probability
+            confidence = 1 - probability
 
 
         confidence_percent = round(
-            confidence_value * 100,
+            confidence * 100,
             2
         )
 
 
-        print(
-            f"RAW PROBABILITY: {probability}",
-            flush=True
-        )
-
-        print(
-            f"RESULT: {label}",
-            flush=True
-        )
-
-        print(
-            f"CONFIDENCE: {confidence_percent}%",
-            flush=True
-        )
-
-        print(
-            f"INFERENCE TIME: {elapsed:.2f}s",
-            flush=True
-        )
-
-
-        return jsonify({
-
+        result = {
             "prediction": label,
-
             "confidence": confidence_percent,
+            "inference_time": round(elapsed, 2)
+        }
 
-            "inference_time": round(
-                elapsed,
-                2
-            )
 
-        })
+        print(
+            f"RESULT: {result}",
+            flush=True
+        )
+
+
+        return jsonify(result)
 
 
     except Exception as e:
 
-        error_details = traceback.format_exc()
+        print(
+            "ANALYSIS ERROR:",
+            flush=True
+        )
 
-        print("\n========================================", flush=True)
-        print("ANALYSIS ERROR", flush=True)
-        print(error_details, flush=True)
-        print("========================================\n", flush=True)
+        print(
+            traceback.format_exc(),
+            flush=True
+        )
+
 
         return jsonify({
-
             "error": "Analysis failed.",
-
             "details": str(e)
-
         }), 500
 
 
     finally:
 
-        # ----------------------------------------------------
-        # MEMORY CLEANUP
-        # ----------------------------------------------------
-
+        # Release request memory
         if processed_image is not None:
             del processed_image
-
-        if prediction_tensor is not None:
-            del prediction_tensor
 
         gc.collect()
 
 
 # ============================================================
-# HEALTH CHECK
-# ============================================================
-
-@app.route("/health")
-def health():
-
-    if model is None:
-
-        return jsonify({
-
-            "status": "error",
-
-            "model_loaded": False,
-
-            "error": model_load_error
-
-        }), 500
-
-
-    return jsonify({
-
-        "status": "ok",
-
-        "model_loaded": True,
-
-        "model_input": str(
-            model.input_shape
-        ),
-
-        "model_output": str(
-            model.output_shape
-        )
-
-    })
-
-
-# ============================================================
-# ERROR HANDLER
+# FILE TOO LARGE
 # ============================================================
 
 @app.errorhandler(413)
 def file_too_large(error):
 
     return jsonify({
-
-        "error":
-        "Image file is too large. Maximum size is 10MB."
-
+        "error": "Image too large. Maximum size is 10MB."
     }), 413
 
 
@@ -528,19 +418,11 @@ def file_too_large(error):
 if __name__ == "__main__":
 
     port = int(
-        os.environ.get(
-            "PORT",
-            5000
-        )
-    )
-
-    print(
-        f"STARTING SERVER ON PORT {port}",
-        flush=True
+        os.environ.get("PORT", 5000)
     )
 
     app.run(
         host="0.0.0.0",
-        port=port,
-        debug=False
+        port=port
     )
+```
