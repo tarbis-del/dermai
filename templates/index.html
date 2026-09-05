@@ -1,1207 +1,1168 @@
-
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
-
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <meta
-        name="viewport"
-        content="width=device-width, initial-scale=1.0"
-    >
+    <title>DermAI — Skin Lesion Classifier</title>
 
-    <title>DermAI — Skin Disease Detector</title>
-
-    <style>
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-
-        body {
-
-            min-height: 100vh;
-
-            background:
-                radial-gradient(
-                    circle at 20% 0%,
-                    rgba(212, 175, 55, 0.16),
-                    transparent 35%
-                ),
-                radial-gradient(
-                    circle at 100% 100%,
-                    rgba(212, 175, 55, 0.08),
-                    transparent 35%
-                ),
-                #050505;
-
-            color: #f5f0df;
-
-            font-family:
-                Arial,
-                Helvetica,
-                sans-serif;
-
-            display: flex;
-
-            justify-content: center;
-
-            align-items: center;
-
-            padding: 30px;
-        }
-
-
-        .container {
-
-            width: 100%;
-
-            max-width: 760px;
-
-            background:
-                linear-gradient(
-                    145deg,
-                    rgba(25, 25, 25, 0.98),
-                    rgba(10, 10, 10, 0.98)
-                );
-
-            border:
-                1px solid
-                rgba(212, 175, 55, 0.35);
-
-            border-radius: 28px;
-
-            padding: 48px;
-
-            text-align: center;
-
-            box-shadow:
-                0 0 70px
-                rgba(212, 175, 55, 0.10);
-        }
-
-
-        .logo {
-
-            color: #d4af37;
-
-            font-size: 14px;
-
-            font-weight: bold;
-
-            letter-spacing: 5px;
-
-            margin-bottom: 14px;
-
-            text-transform: uppercase;
-        }
-
-
-        h1 {
-
-            font-size: clamp(32px, 6vw, 48px);
-
-            margin-bottom: 14px;
-
-            line-height: 1.1;
-
-            background:
-                linear-gradient(
-                    90deg,
-                    #fff2b0,
-                    #d4af37,
-                    #f8e9a8
-                );
-
-            -webkit-background-clip: text;
-
-            -webkit-text-fill-color: transparent;
-        }
-
-
-        .subtitle {
-
-            color: #999;
-
-            line-height: 1.7;
-
-            max-width: 560px;
-
-            margin:
-                0 auto 35px;
-        }
-
-
-        /* =========================
-           UPLOAD AREA
-        ========================= */
-
-        .upload-box {
-
-            display: flex;
-
-            flex-direction: column;
-
-            justify-content: center;
-
-            align-items: center;
-
-            min-height: 230px;
-
-            border:
-                2px dashed
-                rgba(212, 175, 55, 0.45);
-
-            border-radius: 22px;
-
-            padding: 35px 25px;
-
-            cursor: pointer;
-
-            transition:
-                border-color 0.25s ease,
-                background 0.25s ease,
-                transform 0.25s ease,
-                box-shadow 0.25s ease;
-
-            background:
-                rgba(255, 255, 255, 0.015);
-        }
-
-
-        .upload-box:hover {
-
-            border-color: #d4af37;
-
-            background:
-                rgba(212, 175, 55, 0.055);
-
-            transform: translateY(-2px);
-
-            box-shadow:
-                0 10px 35px
-                rgba(212, 175, 55, 0.08);
-        }
-
-
-        .upload-box.dragover {
-
-            border-color: #f5dc78;
-
-            background:
-                rgba(212, 175, 55, 0.10);
-
-            transform: scale(1.01);
-
-            box-shadow:
-                0 0 35px
-                rgba(212, 175, 55, 0.12);
-        }
-
-
-        .upload-icon {
-
-            width: 72px;
-
-            height: 72px;
-
-            display: flex;
-
-            justify-content: center;
-
-            align-items: center;
-
-            border-radius: 50%;
-
-            background:
-                rgba(212, 175, 55, 0.10);
-
-            border:
-                1px solid
-                rgba(212, 175, 55, 0.25);
-
-            font-size: 32px;
-
-            margin-bottom: 18px;
-        }
-
-
-        .upload-text {
-
-            color: #eee;
-
-            font-size: 18px;
-
-            font-weight: bold;
-
-            margin-bottom: 9px;
-        }
-
-
-        .upload-subtext {
-
-            color: #888;
-
-            font-size: 14px;
-
-            margin-bottom: 12px;
-        }
-
-
-        .upload-hint {
-
-            color: #5f5f5f;
-
-            font-size: 12px;
-
-            letter-spacing: 0.4px;
-        }
-
-
-        input[type="file"] {
-
-            display: none;
-        }
-
-
-        /* =========================
-           PREVIEW
-        ========================= */
-
-        .preview-container {
-
-            display: none;
-
-            margin-top: 22px;
-
-            padding: 15px;
-
-            border-radius: 18px;
-
-            background:
-                rgba(255, 255, 255, 0.025);
-
-            border:
-                1px solid
-                rgba(212, 175, 55, 0.15);
-        }
-
-
-        #preview {
-
-            display: block;
-
-            max-width: 100%;
-
-            max-height: 320px;
-
-            margin: auto;
-
-            border-radius: 13px;
-
-            object-fit: contain;
-        }
-
-
-        .file-name {
-
-            margin-top: 12px;
-
-            color: #aaa;
-
-            font-size: 13px;
-
-            word-break: break-word;
-        }
-
-
-        /* =========================
-           BUTTON
-        ========================= */
-
-        button {
-
-            width: 100%;
-
-            padding: 17px;
-
-            margin-top: 22px;
-
-            border: none;
-
-            border-radius: 13px;
-
-            background:
-                linear-gradient(
-                    135deg,
-                    #c9a227,
-                    #f0d77b,
-                    #d4af37
-                );
-
-            color: #111;
-
-            font-size: 16px;
-
-            font-weight: bold;
-
-            letter-spacing: 0.3px;
-
-            cursor: pointer;
-
-            transition:
-                transform 0.2s ease,
-                box-shadow 0.2s ease,
-                opacity 0.2s ease;
-        }
-
-
-        button:hover:not(:disabled) {
-
-            transform:
-                translateY(-2px);
-
-            box-shadow:
-                0 10px 30px
-                rgba(212, 175, 55, 0.22);
-        }
-
-
-        button:active:not(:disabled) {
-
-            transform:
-                translateY(0);
-        }
-
-
-        button:disabled {
-
-            opacity: 0.45;
-
-            cursor: not-allowed;
-        }
-
-
-        /* =========================
-           LOADING
-        ========================= */
-
-        .loading {
-
-            display: none;
-
-            margin-top: 20px;
-
-            color: #cdb85d;
-
-            font-size: 14px;
-        }
-
-
-        .spinner {
-
-            display: inline-block;
-
-            width: 16px;
-
-            height: 16px;
-
-            border:
-                2px solid
-                rgba(212, 175, 55, 0.25);
-
-            border-top-color:
-                #d4af37;
-
-            border-radius: 50%;
-
-            animation:
-                spin 0.8s linear infinite;
-
-            vertical-align: -3px;
-
-            margin-right: 7px;
-        }
-
-
-        @keyframes spin {
-
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-
-        /* =========================
-           RESULT
-        ========================= */
-
-        #result {
-
-            display: none;
-
-            margin-top: 28px;
-
-            padding: 28px;
-
-            border-radius: 19px;
-
-            background:
-                linear-gradient(
-                    145deg,
-                    rgba(212, 175, 55, 0.08),
-                    rgba(212, 175, 55, 0.025)
-                );
-
-            border:
-                1px solid
-                rgba(212, 175, 55, 0.25);
-
-            animation:
-                resultAppear 0.35s ease;
-        }
-
-
-        @keyframes resultAppear {
-
-            from {
-
-                opacity: 0;
-
-                transform:
-                    translateY(8px);
-            }
-
-            to {
-
-                opacity: 1;
-
-                transform:
-                    translateY(0);
-            }
-        }
-
-
-        .result-title {
-
-            color: #999;
-
-            font-size: 13px;
-
-            text-transform: uppercase;
-
-            letter-spacing: 2px;
-        }
-
-
-        #prediction {
-
-            color: #d4af37;
-
-            font-size: 34px;
-
-            font-weight: bold;
-
-            margin:
-                10px 0 8px;
-        }
-
-
-        #confidence {
-
-            color: #aaa;
-
-            font-size: 14px;
-        }
-
-
-        /* =========================
-           ERROR
-        ========================= */
-
-        #error {
-
-            display: none;
-
-            margin-top: 20px;
-
-            padding: 15px 18px;
-
-            border-radius: 12px;
-
-            background:
-                rgba(180, 40, 40, 0.12);
-
-            border:
-                1px solid
-                rgba(255, 100, 100, 0.20);
-
-            color: #ff9b9b;
-
-            font-size: 14px;
-
-            line-height: 1.5;
-
-            word-break: break-word;
-        }
-
-
-        /* =========================
-           DISCLAIMER
-        ========================= */
-
-        .disclaimer {
-
-            margin-top: 30px;
-
-            color: #555;
-
-            font-size: 11px;
-
-            line-height: 1.6;
-        }
-
-
-        @media (max-width: 600px) {
-
-            body {
-
-                padding: 15px;
-
-            }
-
-
-            .container {
-
-                padding: 30px 20px;
-
-                border-radius: 22px;
-
-            }
-
-
-            .upload-box {
-
-                min-height: 210px;
-
-            }
-
-        }
-
-    </style>
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-
 
 <body>
 
-
-<div class="container">
-
-
-    <div class="logo">
-        DERMAI
-    </div>
-
-
-    <h1>
-        Skin Disease Detector
-    </h1>
-
-
-    <p class="subtitle">
-        Upload a skin lesion image and our
-        machine-learning model will analyze it.
-    </p>
+    <!-- BACKGROUND EFFECTS -->
+    <div class="glow glow-one"></div>
+    <div class="glow glow-two"></div>
 
 
     <!-- =========================
-         UPLOAD AREA
+         NAVIGATION
     ========================== -->
 
-    <label
-        class="upload-box"
-        id="uploadBox"
-        for="imageInput"
-    >
+    <nav>
 
-        <div class="upload-icon">
-            📷
+        <a href="#home" class="brand">
+            DERMA<span>AI</span>
+        </a>
+
+        <div class="nav-links">
+
+            <a href="#home">Home</a>
+
+            <a href="#how-it-works">How It Works</a>
+
+            <a href="#about">About</a>
+
+            <a href="#classifier">Classifier</a>
+
         </div>
 
-
-        <div class="upload-text">
-            Drop your image here
+        <div class="nav-tag">
+            ML RESEARCH DEMO
         </div>
 
-
-        <div class="upload-subtext">
-            or click to browse
-        </div>
+    </nav>
 
 
-        <div class="upload-hint">
-            JPG • JPEG • PNG • WEBP
-        </div>
 
-    </label>
+    <main>
 
 
-    <input
-        type="file"
-        id="imageInput"
-        accept="image/png,image/jpeg,image/jpg,image/webp"
-    >
+        <!-- =========================
+             HOME / HERO
+        ========================== -->
+
+        <section class="hero" id="home">
+
+            <div class="eyebrow">
+                ARTIFICIAL INTELLIGENCE × DERMATOLOGY
+            </div>
+
+            <h1>
+                Skin Lesion
+                <br>
+                <em>Classifier.</em>
+            </h1>
+
+            <p class="subtitle">
+
+                DermAI is a machine-learning demonstration exploring
+                how artificial intelligence can analyze skin lesion
+                images and classify them as benign or malignant.
+
+            </p>
+
+            <a href="#classifier" class="hero-button">
+                TRY THE CLASSIFIER
+                <span>↓</span>
+            </a>
+
+        </section>
+
+
+
+        <!-- =========================
+             INTRODUCTION
+        ========================== -->
+
+        <section class="intro-section">
+
+            <div class="section-label">
+                01 — THE PROJECT
+            </div>
+
+            <div class="intro-grid">
+
+                <div>
+
+                    <h2>
+                        Exploring the intersection of
+                        <em>AI & dermatology.</em>
+                    </h2>
+
+                </div>
+
+                <div>
+
+                    <p>
+                        Skin lesions can vary significantly in appearance,
+                        making image-based classification a challenging
+                        computer vision problem.
+                    </p>
+
+                    <p>
+                        DermAI demonstrates how a trained neural network
+                        can process an image and produce a classification
+                        prediction.
+                    </p>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             HOW IT WORKS
+        ========================== -->
+
+        <section id="how-it-works" class="how-section">
+
+            <div class="section-heading">
+
+                <div class="section-label">
+                    02 — HOW IT WORKS
+                </div>
+
+                <h2>
+                    From image to
+                    <em>prediction.</em>
+                </h2>
+
+            </div>
+
+
+            <div class="steps">
+
+
+                <div class="step">
+
+                    <span class="step-number">
+                        01
+                    </span>
+
+                    <div class="step-icon">
+                        ↑
+                    </div>
+
+                    <h3>
+                        Upload
+                    </h3>
+
+                    <p>
+                        A skin lesion image is uploaded
+                        through the classifier interface.
+                    </p>
+
+                </div>
+
+
+
+                <div class="step">
+
+                    <span class="step-number">
+                        02
+                    </span>
+
+                    <div class="step-icon">
+                        ◇
+                    </div>
+
+                    <h3>
+                        Preprocess
+                    </h3>
+
+                    <p>
+                        The image is converted, resized,
+                        and prepared for the neural network.
+                    </p>
+
+                </div>
+
+
+
+                <div class="step">
+
+                    <span class="step-number">
+                        03
+                    </span>
+
+                    <div class="step-icon">
+                        ◎
+                    </div>
+
+                    <h3>
+                        Analyze
+                    </h3>
+
+                    <p>
+                        The trained machine-learning model
+                        processes the image.
+                    </p>
+
+                </div>
+
+
+
+                <div class="step">
+
+                    <span class="step-number">
+                        04
+                    </span>
+
+                    <div class="step-icon">
+                        ✓
+                    </div>
+
+                    <h3>
+                        Result
+                    </h3>
+
+                    <p>
+                        DermAI displays the predicted class
+                        together with the model's confidence.
+                    </p>
+
+                </div>
+
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             CLASSIFIER
+        ========================== -->
+
+        <section id="classifier" class="classifier-section">
+
+            <div class="section-heading classifier-heading">
+
+                <div class="section-label">
+                    03 — LIVE DEMONSTRATION
+                </div>
+
+                <h2>
+                    Skin Lesion
+                    <em>Classifier.</em>
+                </h2>
+
+                <p>
+                    Upload an image below to see the machine-learning
+                    model in action.
+                </p>
+
+            </div>
+
+
+
+            <div class="analyzer-card">
+
+
+                <!-- UPLOAD STATE -->
+
+                <div id="uploadState">
+
+                    <label
+                        class="drop-zone"
+                        id="uploadBox"
+                        for="imageInput"
+                    >
+
+                        <div class="upload-icon">
+                            ↗
+                        </div>
+
+                        <h3>
+                            Drop your image here
+                        </h3>
+
+                        <p>
+                            or click to browse
+                        </p>
+
+                        <span class="upload-formats">
+                            JPG · JPEG · PNG · WEBP
+                        </span>
+
+                    </label>
+
+
+                    <input
+                        type="file"
+                        id="imageInput"
+                        accept="image/png,image/jpeg,image/jpg,image/webp"
+                    >
+
+
+                    <div
+                        class="preview-container hidden"
+                        id="previewContainer"
+                    >
+
+                        <img
+                            id="preview"
+                            alt="Selected skin lesion image"
+                        >
+
+                        <div
+                            class="file-name"
+                            id="fileName"
+                        ></div>
+
+                    </div>
+
+
+                    <button
+                        class="gold-btn large"
+                        id="analyzeButton"
+                        disabled
+                    >
+
+                        Analyze Image
+
+                        <span>
+                            →
+                        </span>
+
+                    </button>
+
+                </div>
+
+
+
+                <!-- LOADING STATE -->
+
+                <div
+                    class="loading hidden"
+                    id="loading"
+                >
+
+                    <div class="scanner">
+
+                        <div class="loader-circle"></div>
+
+                        <div class="scan-line"></div>
+
+                    </div>
+
+                    <h2>
+                        Analyzing lesion...
+                    </h2>
+
+                    <p>
+                        DermAI is processing the image.
+                    </p>
+
+                </div>
+
+
+
+                <!-- RESULT STATE -->
+
+                <div
+                    class="result-layout hidden"
+                    id="result"
+                >
+
+                    <div class="result-image-wrap">
+
+                        <img
+                            id="resultImage"
+                            alt="Analyzed skin lesion"
+                        >
+
+                    </div>
+
+
+                    <div class="result-content">
+
+                        <div class="section-label">
+                            MODEL PREDICTION
+                        </div>
+
+                        <h2 id="prediction">
+                            —
+                        </h2>
+
+                        <p class="result-text">
+                            The model has classified the uploaded
+                            image based on patterns learned during
+                            training.
+                        </p>
+
+
+                        <div class="confidence-box">
+
+                            <div class="confidence-header">
+
+                                <span>
+                                    CONFIDENCE
+                                </span>
+
+                                <strong id="confidence">
+                                    —
+                                </strong>
+
+                            </div>
+
+                            <div class="bar">
+
+                                <div
+                                    class="bar-fill"
+                                    id="confidenceBar"
+                                ></div>
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="medical-note">
+
+                            <strong>Important:</strong>
+
+                            This prediction is generated by an
+                            experimental machine-learning model.
+                            It is not a medical diagnosis and should
+                            not replace evaluation by a qualified
+                            healthcare professional.
+
+                        </div>
+
+
+                        <button
+                            class="text-btn"
+                            id="tryAgain"
+                        >
+                            ← Analyze another image
+                        </button>
+
+                    </div>
+
+                </div>
+
+
+
+                <!-- ERROR -->
+
+                <div
+                    id="error"
+                    class="error-box hidden"
+                ></div>
+
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             ABOUT
+        ========================== -->
+
+        <section id="about" class="about-section">
+
+            <div class="section-label">
+                04 — ABOUT DERMAI
+            </div>
+
+
+            <div class="about-grid">
+
+                <div>
+
+                    <h2>
+                        A small step toward
+                        <em>intelligent healthcare.</em>
+                    </h2>
+
+                </div>
+
+
+                <div class="about-text">
+
+                    <p>
+                        DermAI was created as an educational and
+                        research-oriented exploration of machine
+                        learning in medical image analysis.
+                    </p>
+
+                    <p>
+                        The system uses a trained neural network to
+                        examine visual patterns within skin lesion
+                        images and generate a binary classification.
+                    </p>
+
+                    <p>
+                        The project demonstrates the potential of
+                        computer vision while also highlighting the
+                        importance of responsible AI, model
+                        limitations, and human medical expertise.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <div class="technology-grid">
+
+                <div>
+
+                    <span>
+                        TECHNOLOGY
+                    </span>
+
+                    <strong>
+                        Deep Learning
+                    </strong>
+
+                </div>
+
+
+                <div>
+
+                    <span>
+                        INPUT
+                    </span>
+
+                    <strong>
+                        Skin Lesion Image
+                    </strong>
+
+                </div>
+
+
+                <div>
+
+                    <span>
+                        OUTPUT
+                    </span>
+
+                    <strong>
+                        Binary Classification
+                    </strong>
+
+                </div>
+
+
+                <div>
+
+                    <span>
+                        PURPOSE
+                    </span>
+
+                    <strong>
+                        Research & Education
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =========================
+             DISCLAIMER
+        ========================== -->
+
+        <section class="final-note">
+
+            <div class="warning-symbol">
+                ⚠
+            </div>
+
+            <div>
+
+                <h3>
+                    Research & Educational Demonstration
+                </h3>
+
+                <p>
+                    DermAI is not a medical diagnostic device.
+                    Predictions may be incorrect and should never
+                    be used to make medical decisions. If you are
+                    concerned about a skin lesion, consult a
+                    qualified healthcare professional.
+                </p>
+
+            </div>
+
+        </section>
+
+
+    </main>
+
 
 
     <!-- =========================
-         IMAGE PREVIEW
+         FOOTER
     ========================== -->
 
-    <div
-        class="preview-container"
-        id="previewContainer"
-    >
+    <footer>
 
-        <img
-            id="preview"
-            alt="Selected image preview"
-        >
-
-        <div
-            class="file-name"
-            id="fileName"
-        ></div>
-
-    </div>
-
-
-    <!-- =========================
-         ANALYZE BUTTON
-    ========================== -->
-
-    <button
-        id="analyzeButton"
-        disabled
-    >
-        Analyze Image
-    </button>
-
-
-    <!-- =========================
-         LOADING
-    ========================== -->
-
-    <div
-        class="loading"
-        id="loading"
-    >
-
-        <span class="spinner"></span>
-
-        Analyzing image with DermAI...
-
-    </div>
-
-
-    <!-- =========================
-         RESULT
-    ========================== -->
-
-    <div id="result">
-
-        <div class="result-title">
-            Prediction
+        <div class="footer-brand">
+            DERMA<span>AI</span>
         </div>
 
-
-        <div id="prediction">
-            —
+        <div>
+            SKIN LESION CLASSIFICATION · MACHINE LEARNING
         </div>
 
-
-        <div id="confidence">
-            Confidence: —
+        <div>
+            © 2026 DERMAI
         </div>
 
-    </div>
-
-
-    <!-- =========================
-         ERROR
-    ========================== -->
-
-    <div id="error"></div>
-
-
-    <!-- =========================
-         DISCLAIMER
-    ========================== -->
-
-    <p class="disclaimer">
-
-        ⚠️ This tool is for research and educational
-        purposes only. It is not a medical diagnostic
-        device and should not replace professional
-        medical advice.
-
-    </p>
-
-
-</div>
+    </footer>
 
 
 
 <script>
 
 
-    /* ==========================================
-       GET ELEMENTS
-    ========================================== */
+/* ============================================================
+   ELEMENTS
+============================================================ */
 
-    const imageInput =
-        document.getElementById("imageInput");
+const imageInput =
+    document.getElementById("imageInput");
+
+const uploadBox =
+    document.getElementById("uploadBox");
+
+const preview =
+    document.getElementById("preview");
+
+const previewContainer =
+    document.getElementById("previewContainer");
+
+const fileName =
+    document.getElementById("fileName");
+
+const analyzeButton =
+    document.getElementById("analyzeButton");
+
+const uploadState =
+    document.getElementById("uploadState");
+
+const loading =
+    document.getElementById("loading");
+
+const result =
+    document.getElementById("result");
+
+const resultImage =
+    document.getElementById("resultImage");
+
+const prediction =
+    document.getElementById("prediction");
+
+const confidence =
+    document.getElementById("confidence");
+
+const confidenceBar =
+    document.getElementById("confidenceBar");
+
+const errorBox =
+    document.getElementById("error");
+
+const tryAgain =
+    document.getElementById("tryAgain");
 
 
-    const uploadBox =
-        document.getElementById("uploadBox");
+/* ============================================================
+   FILE HANDLING
+============================================================ */
+
+function handleFile(file) {
+
+    if (!file) {
+        return;
+    }
 
 
-    const preview =
-        document.getElementById("preview");
+    const allowedTypes = [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+    ];
 
 
-    const previewContainer =
-        document.getElementById("previewContainer");
+    if (!allowedTypes.includes(file.type)) {
+
+        showError(
+            "Please upload a JPG, JPEG, PNG, or WEBP image."
+        );
+
+        imageInput.value = "";
+
+        return;
+    }
 
 
-    const fileName =
-        document.getElementById("fileName");
+    hideError();
 
 
-    const analyzeButton =
-        document.getElementById("analyzeButton");
+    const reader =
+        new FileReader();
 
 
-    const result =
-        document.getElementById("result");
+    reader.onload =
+        function(event) {
+
+            preview.src =
+                event.target.result;
+
+            resultImage.src =
+                event.target.result;
+
+            previewContainer.classList.remove(
+                "hidden"
+            );
+
+        };
 
 
-    const prediction =
-        document.getElementById("prediction");
+    reader.readAsDataURL(file);
 
 
-    const confidence =
-        document.getElementById("confidence");
+    fileName.textContent =
+        file.name;
 
 
-    const errorBox =
-        document.getElementById("error");
+    analyzeButton.disabled =
+        false;
 
 
-    const loading =
-        document.getElementById("loading");
+    result.classList.add(
+        "hidden"
+    );
+
+}
 
 
+/* ============================================================
+   FILE INPUT
+============================================================ */
 
-    /* ==========================================
-       HANDLE SELECTED FILE
-    ========================================== */
+imageInput.addEventListener(
+    "change",
+    function() {
 
-    function handleFile(file) {
+        handleFile(
+            this.files[0]
+        );
+
+    }
+);
+
+
+/* ============================================================
+   DRAG & DROP
+============================================================ */
+
+uploadBox.addEventListener(
+    "dragover",
+    function(event) {
+
+        event.preventDefault();
+
+        uploadBox.classList.add(
+            "dragging"
+        );
+
+    }
+);
+
+
+uploadBox.addEventListener(
+    "dragleave",
+    function(event) {
+
+        event.preventDefault();
+
+        uploadBox.classList.remove(
+            "dragging"
+        );
+
+    }
+);
+
+
+uploadBox.addEventListener(
+    "drop",
+    function(event) {
+
+        event.preventDefault();
+
+        uploadBox.classList.remove(
+            "dragging"
+        );
+
+
+        const file =
+            event.dataTransfer.files[0];
+
 
         if (!file) {
             return;
         }
 
 
-        const allowedTypes = [
+        try {
 
-            "image/jpeg",
+            const dataTransfer =
+                new DataTransfer();
 
-            "image/png",
+            dataTransfer.items.add(file);
 
-            "image/webp"
+            imageInput.files =
+                dataTransfer.files;
 
-        ];
+        }
 
+        catch (error) {
 
-        if (!allowedTypes.includes(file.type)) {
-
-            showError(
-                "Please upload a JPG, JPEG, PNG, or WEBP image."
+            console.log(
+                "Could not assign dropped file:",
+                error
             );
 
-            imageInput.value = "";
+        }
+
+
+        handleFile(file);
+
+    }
+);
+
+
+/* ============================================================
+   ERROR
+============================================================ */
+
+function showError(message) {
+
+    errorBox.textContent =
+        message;
+
+    errorBox.classList.remove(
+        "hidden"
+    );
+
+}
+
+
+function hideError() {
+
+    errorBox.textContent =
+        "";
+
+    errorBox.classList.add(
+        "hidden"
+    );
+
+}
+
+
+/* ============================================================
+   ANALYZE
+============================================================ */
+
+analyzeButton.addEventListener(
+    "click",
+    async function() {
+
+        const file =
+            imageInput.files[0];
+
+
+        if (!file) {
+
+            showError(
+                "Please select an image first."
+            );
 
             return;
+
         }
+
+
+        analyzeButton.disabled =
+            true;
 
 
         hideError();
 
 
-        const reader =
-            new FileReader();
+        uploadState.classList.add(
+            "hidden"
+        );
 
 
-        reader.onload =
-            function(event) {
-
-                preview.src =
-                    event.target.result;
-
-                previewContainer.style.display =
-                    "block";
-
-            };
+        loading.classList.remove(
+            "hidden"
+        );
 
 
-        reader.readAsDataURL(file);
+        result.classList.add(
+            "hidden"
+        );
 
 
-        fileName.textContent =
-            file.name;
+        const formData =
+            new FormData();
+
+
+        formData.append(
+            "image",
+            file
+        );
+
+
+        try {
+
+            const response =
+                await fetch(
+                    "/analyze",
+                    {
+                        method: "POST",
+                        body: formData
+                    }
+                );
+
+
+            const text =
+                await response.text();
+
+
+            console.log(
+                "Server response:",
+                text
+            );
+
+
+            let data;
+
+
+            try {
+
+                data =
+                    JSON.parse(text);
+
+            }
+
+            catch (jsonError) {
+
+                throw new Error(
+                    "The server returned an invalid response. Please check the server status."
+                );
+
+            }
+
+
+            if (!response.ok) {
+
+                throw new Error(
+
+                    data.details
+                        ? `${data.error}: ${data.details}`
+                        : data.error ||
+                          "Analysis failed."
+
+                );
+
+            }
+
+
+            if (
+                !data.prediction ||
+                data.confidence === undefined
+            ) {
+
+                throw new Error(
+                    "The server response was missing prediction information."
+                );
+
+            }
+
+
+            prediction.textContent =
+                data.prediction;
+
+
+            confidence.textContent =
+                `${data.confidence}%`;
+
+
+            confidenceBar.style.width =
+                `${data.confidence}%`;
+
+
+            if (
+                data.prediction === "Malignant"
+            ) {
+
+                prediction.classList.add(
+                    "result-high"
+                );
+
+                prediction.classList.remove(
+                    "result-low"
+                );
+
+            }
+
+            else {
+
+                prediction.classList.add(
+                    "result-low"
+                );
+
+                prediction.classList.remove(
+                    "result-high"
+                );
+
+            }
+
+
+            loading.classList.add(
+                "hidden"
+            );
+
+
+            result.classList.remove(
+                "hidden"
+            );
+
+
+            result.scrollIntoView({
+                behavior: "smooth",
+                block: "center"
+            });
+
+
+        }
+
+        catch (error) {
+
+            console.error(
+                "Analysis error:",
+                error
+            );
+
+
+            loading.classList.add(
+                "hidden"
+            );
+
+
+            uploadState.classList.remove(
+                "hidden"
+            );
+
+
+            showError(
+                error.message ||
+                "Something went wrong while analyzing the image."
+            );
+
+        }
 
 
         analyzeButton.disabled =
             false;
 
-
-        result.style.display =
-            "none";
-
     }
+);
 
 
+/* ============================================================
+   TRY AGAIN
+============================================================ */
 
-    /* ==========================================
-       FILE INPUT
-    ========================================== */
+tryAgain.addEventListener(
+    "click",
+    function() {
 
-    imageInput.addEventListener(
-        "change",
-        function() {
+        result.classList.add(
+            "hidden"
+        );
 
-            const file =
-                this.files[0];
+        uploadState.classList.remove(
+            "hidden"
+        );
 
-            handleFile(file);
+        previewContainer.classList.add(
+            "hidden"
+        );
 
-        }
-    );
-
-
-
-    /* ==========================================
-       DRAG & DROP
-    ========================================== */
-
-    uploadBox.addEventListener(
-        "dragover",
-        function(event) {
-
-            event.preventDefault();
-
-            uploadBox.classList.add(
-                "dragover"
-            );
-
-        }
-    );
-
-
-    uploadBox.addEventListener(
-        "dragleave",
-        function(event) {
-
-            event.preventDefault();
-
-            uploadBox.classList.remove(
-                "dragover"
-            );
-
-        }
-    );
-
-
-    uploadBox.addEventListener(
-        "drop",
-        function(event) {
-
-            event.preventDefault();
-
-            uploadBox.classList.remove(
-                "dragover"
-            );
-
-
-            const file =
-                event.dataTransfer.files[0];
-
-
-            if (!file) {
-                return;
-            }
-
-
-            /*
-             * Put the dropped file into
-             * the file input so that the
-             * Analyze button can use it.
-             */
-
-            try {
-
-                const dataTransfer =
-                    new DataTransfer();
-
-                dataTransfer.items.add(file);
-
-                imageInput.files =
-                    dataTransfer.files;
-
-            } catch (e) {
-
-                console.log(
-                    "Could not assign dropped file:",
-                    e
-                );
-
-            }
-
-
-            handleFile(file);
-
-        }
-    );
-
-
-
-    /* ==========================================
-       ERROR FUNCTIONS
-    ========================================== */
-
-    function showError(message) {
-
-        errorBox.textContent =
-            message;
-
-        errorBox.style.display =
-            "block";
-
-    }
-
-
-    function hideError() {
-
-        errorBox.style.display =
-            "none";
-
-        errorBox.textContent =
+        imageInput.value =
             "";
 
+        analyzeButton.disabled =
+            true;
+
+        confidenceBar.style.width =
+            "0%";
+
+        hideError();
+
+        document
+            .getElementById("classifier")
+            .scrollIntoView({
+                behavior: "smooth"
+            });
+
     }
+);
 
 
+/* ============================================================
+   NAVIGATION — CLOSE MOBILE MENU IF NEEDED
+============================================================ */
 
-    /* ==========================================
-       ANALYZE IMAGE
-    ========================================== */
+document
+    .querySelectorAll(".nav-links a")
+    .forEach(
+        link => {
 
-    analyzeButton.addEventListener(
-        "click",
-        async function() {
+            link.addEventListener(
+                "click",
+                () => {
 
-            const file =
-                imageInput.files[0];
+                    console.log(
+                        "Navigation:",
+                        link.textContent
+                    );
 
-
-            if (!file) {
-
-                showError(
-                    "Please select an image first."
-                );
-
-                return;
-
-            }
-
-
-            analyzeButton.disabled =
-                true;
-
-
-            analyzeButton.textContent =
-                "Analyzing...";
-
-
-            loading.style.display =
-                "block";
-
-
-            result.style.display =
-                "none";
-
-
-            hideError();
-
-
-            const formData =
-                new FormData();
-
-
-            formData.append(
-                "image",
-                file
+                }
             );
-
-
-            try {
-
-
-                /*
-                 * Send image to Flask.
-                 */
-
-                const response =
-                    await fetch(
-                        "/analyze",
-                        {
-                            method: "POST",
-                            body: formData
-                        }
-                    );
-
-
-                /*
-                 * Read response as TEXT first.
-                 *
-                 * This is important because
-                 * it prevents the frontend from
-                 * crashing if Render sends back
-                 * HTML instead of JSON.
-                 */
-
-                const text =
-                    await response.text();
-
-
-                console.log(
-                    "Server response:",
-                    text
-                );
-
-
-                let data;
-
-
-                try {
-
-                    data =
-                        JSON.parse(text);
-
-                } catch (jsonError) {
-
-                    /*
-                     * If Flask/Gunicorn returns
-                     * HTML or an empty response,
-                     * show useful information.
-                     */
-
-                    throw new Error(
-                        "The server returned an invalid response. Check the Render logs."
-                    );
-
-                }
-
-
-                /*
-                 * Flask returned an error.
-                 */
-
-                if (!response.ok) {
-
-                    throw new Error(
-
-                        data.details
-
-                            ? `${data.error}: ${data.details}`
-
-                            : data.error ||
-                              "Analysis failed."
-
-                    );
-
-                }
-
-
-                /*
-                 * Successful prediction.
-                 */
-
-                if (
-                    !data.prediction ||
-                    data.confidence === undefined
-                ) {
-
-                    throw new Error(
-                        "The server response was missing prediction information."
-                    );
-
-                }
-
-
-                prediction.textContent =
-                    data.prediction;
-
-
-                confidence.textContent =
-                    `Confidence: ${data.confidence}%`;
-
-
-                result.style.display =
-                    "block";
-
-
-            } catch (error) {
-
-                console.error(
-                    "Analysis error:",
-                    error
-                );
-
-
-                showError(
-                    error.message ||
-                    "Something went wrong while analyzing the image."
-                );
-
-            }
-
-
-            loading.style.display =
-                "none";
-
-
-            analyzeButton.disabled =
-                false;
-
-
-            analyzeButton.textContent =
-                "Analyze Image";
 
         }
     );
 
 </script>
 
-
 </body>
-
 </html>
-
